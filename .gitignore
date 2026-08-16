@@ -1,0 +1,10 @@
+.env
+events.json
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+

@@ -18,12 +18,17 @@ jobs:
         with:
           go-version: '1.21'
           cache: true
+          cache-dependency-path: go.sum
 
-      - name: Run Go Event Parser
+      - name: Build Binary
+        run: |
+          go build -ldflags="-s -w" -o event-parser main.go
+
+      - name: Run Event Parser & Upload to R2
         env:
           CF_R2_ACCOUNT_ID: ${{ secrets.CF_R2_ACCOUNT_ID || secrets.R2_ACCOUNT_ID }}
           CF_R2_ACCESS_KEY_ID: ${{ secrets.CF_R2_ACCESS_KEY_ID || secrets.R2_ACCESS_KEY_ID }}
           CF_R2_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_SECRET_ACCESS_KEY || secrets.R2_SECRET_ACCESS_KEY }}
           CF_R2_BUCKET_NAME: ${{ secrets.CF_R2_BUCKET_NAME || secrets.R2_BUCKET_NAME }}
         run: |
-          go run main.go
+          ./event-parser

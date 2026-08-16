@@ -38,13 +38,7 @@ func loadDotEnv(filepath string) {
 	}
 }
 
-func main() {
-	loadDotEnv(".env")
-
-	dryRunFlag := flag.Bool("dry-run", false, "Save output locally to events.json instead of uploading to Cloudflare R2")
-	outputFileFlag := flag.String("output", "events.json", "Local output filename for dry-run")
-	flag.Parse()
-
+func runParserOnce(dryRun bool, outputFile string) {
 	startTime := time.Now()
 	log.Println("Starting Live Sports Events parser...")
 
@@ -53,24 +47,27 @@ func main() {
 
 	events, err := parser.FetchAllGlobalEvents(ctx)
 	if err != nil {
-		log.Fatalf("Error parsing events: %v", err)
+		log.Printf("Error parsing events: %v", err)
+		return
 	}
 
 	log.Printf("Successfully fetched and normalized %d sports events in %v", len(events), time.Since(startTime))
 
 	jsonData, err := json.MarshalIndent(events, "", "  ")
 	if err != nil {
-		log.Fatalf("Error marshaling events JSON: %v", err)
+		log.Printf("Error marshaling events JSON: %v", err)
+		return
 	}
 
-	dryRunEnv := os.Getenv("DRY_RUN") == "true" || *dryRunFlag
+	dryRunEnv := os.Getenv("DRY_RUN") == "true" || dryRun
 
 	if dryRunEnv {
-		err := os.WriteFile(*outputFileFlag, jsonData, 0644)
+		err := os.WriteFile(outputFile, jsonData, 0644)
 		if err != nil {
-			log.Fatalf("Failed to write dry-run file: %v", err)
+			log.Printf("Failed to write dry-run file: %v", err)
+			return
 		}
-		log.Printf("Dry-run complete. Saved %d events to %s", len(events), *outputFileFlag)
+		log.Printf("Dry-run complete. Saved %d events to %s", len(events), outputFile)
 		return
 	}
 
@@ -99,9 +96,34 @@ func main() {
 
 	err = uploader.UploadToR2(ctx, r2Cfg, "events.json", jsonData)
 	if err != nil {
-		log.Fatalf("Failed to upload to Cloudflare R2: %v", err)
+		log.Printf("Failed to upload to Cloudflare R2: %v", err)
+		return
 	}
 
 	log.Printf("All tasks completed successfully in %v!", time.Since(startTime))
+}
+
+func main() {
+	loadDotEnv(".env")
+
+	dryRunFlag := flag.Bool("dry-run", false, "Save output locally to events.json instead of uploading to Cloudflare R2")
+	outputFileFlag := flag.String("output", "events.json", "Local output filename for dry-run")
+	daemonFlag := flag.Bool("daemon", false, "Run parser continuously in daemon loop mode")
+	intervalFlag := flag.Duration("interval", 2*time.Minute, "Interval between runs in daemon mode (e.g. 2m, 1m)")
+	flag.Parse()
+
+	if *daemonFlag {
+		log.Printf("Running parser in daemon mode every %v...", *intervalFlag)
+		ticker := time.NewTicker(*intervalFlag)
+		defer ticker.Stop()
+
+		runParserOnce(*dryRunFlag, *outputFileFlag)
+		for range ticker.C {
+			runParserOnce(*dryRunFlag, *outputFileFlag)
+		}
+		return
+	}
+
+	runParserOnce(*dryRunFlag, *outputFileFlag)
 }
 

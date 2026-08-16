@@ -7,6 +7,10 @@ on:
     - cron: '*/5 * * * *' # Runs every 5 minutes
   workflow_dispatch: # Allows manual trigger from GitHub UI
 
+concurrency:
+  group: parse-and-upload
+  cancel-in-progress: true
+
 jobs:
   parse-and-upload:
     runs-on: ubuntu-latest

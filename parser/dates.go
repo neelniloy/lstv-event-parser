@@ -162,7 +162,13 @@ func ParseWillowDate(dateStr string) int64 {
 		for _, fmt := range formats {
 			t, err := time.ParseInLocation(fmt, timeStr, gmtPlus6)
 			if err == nil {
-				result := time.Date(now.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), 0, 0, gmtPlus6)
+				year := now.Year()
+				if now.Month() == time.December && t.Month() == time.January {
+					year++
+				} else if now.Month() == time.January && t.Month() == time.December {
+					year--
+				}
+				result := time.Date(year, t.Month(), t.Day(), t.Hour(), t.Minute(), 0, 0, gmtPlus6)
 				return result.UnixMilli()
 			}
 		}

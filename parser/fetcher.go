@@ -18,11 +18,56 @@ type SourceConfig struct {
 	Type string
 }
 
+const defaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+func fetchWithRetry(ctx context.Context, client *http.Client, url string, appToken string, maxRetries int) ([]byte, error) {
+	var lastErr error
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt*200) * time.Millisecond)
+		}
+
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-App-Token", appToken)
+		req.Header.Set("User-Agent", defaultUserAgent)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			lastErr = http.ErrHandlerTimeout
+			continue
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		return body, nil
+	}
+	return nil, lastErr
+}
+
 func FetchAllGlobalEvents(ctx context.Context) ([]models.TimelineEvent, error) {
 	fetchTime := time.Now().UnixMilli()
 
 	client := &http.Client{
 		Timeout: 8 * time.Second,
+		Transport: &http.Transport{
+			MaxIdleConnsPerHost: 10,
+			IdleConnTimeout:     30 * time.Second,
+		},
 	}
 
 	appToken := os.Getenv("APP_TOKEN")
@@ -32,16 +77,20 @@ func FetchAllGlobalEvents(ctx context.Context) ([]models.TimelineEvent, error) {
 
 	// 1. Fetch CricHD channel stream lookup map
 	var crichdStreamMap map[string]models.CrichdApiStream
-	req, err := http.NewRequestWithContext(ctx, "GET", "https://raw.githubusercontent.com/abusaeeidx/CricHd-playlists-Auto-Update-permanent/main/api.json", nil)
-	if err == nil {
-		req.Header.Set("X-App-Token", appToken)
-		resp, err := client.Do(req)
-		if err == nil && resp.StatusCode == 200 {
-			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
+	var cricWg sync.WaitGroup
+	cricWg.Add(1)
+
+	go func() {
+		defer cricWg.Done()
+		cricCtx, cancel := context.WithTimeout(ctx, 6*time.Second)
+		defer cancel()
+		body, err := fetchWithRetry(cricCtx, client, "https://raw.githubusercontent.com/abusaeeidx/CricHd-playlists-Auto-Update-permanent/main/api.json", appToken, 1)
+		if err == nil {
 			crichdStreamMap = ParseCrichdStreamMap(body)
 		}
-	}
+	}()
+
+	cricWg.Wait()
 
 	// 2. Define the 9 event sources
 	sources := []SourceConfig{
@@ -64,26 +113,12 @@ func FetchAllGlobalEvents(ctx context.Context) ([]models.TimelineEvent, error) {
 		go func(sc SourceConfig) {
 			defer wg.Done()
 
-			reqCtx, cancel := context.WithTimeout(ctx, 6*time.Second)
+			reqCtx, cancel := context.WithTimeout(ctx, 7*time.Second)
 			defer cancel()
 
-			req, err := http.NewRequestWithContext(reqCtx, "GET", sc.URL, nil)
+			body, err := fetchWithRetry(reqCtx, client, sc.URL, appToken, 1)
 			if err != nil {
-				return
-			}
-			req.Header.Set("X-App-Token", appToken)
-
-			resp, err := client.Do(req)
-			if err != nil || resp.StatusCode != 200 {
-				if resp != nil {
-					resp.Body.Close()
-				}
 				log.Printf("Failed to fetch source %s: %v", sc.URL, err)
-				return
-			}
-			body, err := io.ReadAll(resp.Body)
-			resp.Body.Close()
-			if err != nil {
 				return
 			}
 
@@ -127,22 +162,31 @@ func FetchAllGlobalEvents(ctx context.Context) ([]models.TimelineEvent, error) {
 	// 4. Merge & Deduplicate
 	unifiedEvents := MergeAndDeduplicate(allEvents, fetchTime)
 
-	// 5. Filter out ended events & streamless live events
+	// 5. Filter out truly backdated events & streamless live events
 	now := time.Now().UnixMilli()
 	var finalEvents []models.TimelineEvent
 
 	for _, ev := range unifiedEvents {
-		isLiveNow := (ev.IsLive != nil && *ev.IsLive) || (now >= ev.StartTimestampMs && now <= ev.EndTimestampMs)
+		maxDurationMs := GetSportMaxDurationMs(ev.Category, ev.Title)
+		maxEndTimeMs := ev.StartTimestampMs + maxDurationMs
 
-		// Filter events that ended more than 1 hour ago
-		if !isLiveNow && ev.EndTimestampMs <= (now-60*60*1000) {
+		// Explicit live flag or within sport-aware max live window
+		isLiveNow := (ev.IsLive != nil && *ev.IsLive) || (now >= ev.StartTimestampMs && now <= maxEndTimeMs)
+		isUpcoming := now < ev.StartTimestampMs
+
+		// Filter out stale events that ended past max sport window and are not explicitly live
+		if !isUpcoming && !isLiveNow && (ev.IsLive == nil || !*ev.IsLive) {
 			continue
 		}
 
-		// Filter live events with no valid playable streams
-		if isLiveNow && (len(ev.Streams) == 0) {
+		// Filter out live events with no valid playable streams
+		if isLiveNow && len(ev.Streams) == 0 {
 			continue
 		}
+
+		// Set calculated IsLive status
+		liveFlag := isLiveNow
+		ev.IsLive = &liveFlag
 
 		finalEvents = append(finalEvents, ev)
 	}

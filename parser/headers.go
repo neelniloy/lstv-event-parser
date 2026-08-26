@@ -2,7 +2,6 @@ package parser
 
 import (
 	"html"
-	"net/url"
 	"strings"
 )
 
@@ -119,20 +118,14 @@ func GetStreamHeadersForURL(streamURL string, existingHeaders map[string]string)
 			headers["Origin"] = "https://www.willow.tv"
 		}
 
-	default:
-		if !hasReferer {
-			parsed, err := url.Parse(streamURL)
-			if err == nil && parsed.Host != "" {
-				scheme := parsed.Scheme
-				if scheme == "" {
-					scheme = "https"
-				}
-				headers["Referer"] = scheme + "://" + parsed.Host + "/"
-				if !hasOrigin {
-					headers["Origin"] = scheme + "://" + parsed.Host
-				}
-			}
+	case strings.Contains(lower, "tmaxapp") || strings.Contains(lower, "tvdsz") || strings.Contains(lower, "live.php") || strings.Contains(lower, "mac="):
+		if _, ok := headers["User-Agent"]; !ok {
+			headers["User-Agent"] = "IPTVSmartersPlayer"
 		}
+
+	default:
+		// Do NOT synthesize Referer/Origin for generic IPTV/HLS streams.
+		// Upstream relay servers reject cross-domain referers with 400 Bad Request.
 	}
 
 	return headers

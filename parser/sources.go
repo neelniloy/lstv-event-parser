@@ -783,9 +783,16 @@ func ParseWillow(body []byte) []models.TimelineEvent {
 // ParseSportsData parses Sports Data schema
 func ParseSportsData(body []byte) []models.TimelineEvent {
 	type StreamItem struct {
-		StreamURL string `json:"stream_url"`
-		Name      string `json:"name"`
-		DrmKey    string `json:"drm_key"`
+		StreamURL   string `json:"stream_url"`
+		Name        string `json:"name"`
+		ChannelName string `json:"channel_name"`
+		DrmKey      string `json:"drm_key"`
+		Kid         string `json:"kid"`
+		Key         string `json:"key"`
+		Referer     string `json:"referer"`
+		Origin      string `json:"origin"`
+		UserAgent   string `json:"user_agent"`
+		Cookie      string `json:"cookie"`
 	}
 	type EventInfo struct {
 		TeamA     string `json:"teamA"`
@@ -855,7 +862,10 @@ func ParseSportsData(body []byte) []models.TimelineEvent {
 		var streams []models.EventStream
 		for j, sObj := range obj.Streams {
 			rawURL := sObj.StreamURL
-			streamName := sObj.Name
+			streamName := strings.TrimSpace(sObj.ChannelName)
+			if streamName == "" {
+				streamName = strings.TrimSpace(sObj.Name)
+			}
 			if streamName == "" {
 				streamName = fmt.Sprintf("Server %d", j+1)
 			}
@@ -880,22 +890,38 @@ func ParseSportsData(body []byte) []models.TimelineEvent {
 				}
 			}
 
+			if sObj.Referer != "" {
+				headersMap["Referer"] = sObj.Referer
+			}
+			if sObj.Origin != "" {
+				headersMap["Origin"] = sObj.Origin
+			}
+			if sObj.UserAgent != "" {
+				headersMap["User-Agent"] = sObj.UserAgent
+			}
+			if sObj.Cookie != "" {
+				headersMap["Cookie"] = sObj.Cookie
+			}
+
 			cleanURL = SanitizeStreamURL(cleanURL)
 			if IsStreamPlayable(cleanURL) {
 				var drmConfig *models.DrmConfig
 				if sObj.DrmKey != "" {
 					drmConfig = &models.DrmConfig{ClearKey: sObj.DrmKey}
+				} else if sObj.Kid != "" && sObj.Key != "" {
+					drmConfig = &models.DrmConfig{ClearKey: fmt.Sprintf("%s:%s", strings.TrimSpace(sObj.Kid), strings.TrimSpace(sObj.Key))}
 				}
 				sType := "hls"
 				if strings.Contains(strings.ToLower(cleanURL), ".mpd") {
 					sType = "dash"
 				}
+				finalHeaders := GetStreamHeadersForURL(cleanURL, headersMap)
 				streams = append(streams, models.EventStream{
 					SourceName: streamName,
 					StreamURL:  cleanURL,
 					Type:       sType,
 					IsM3U:      false,
-					Headers:    headersMap,
+					Headers:    finalHeaders,
 					DRM:        drmConfig,
 				})
 			}

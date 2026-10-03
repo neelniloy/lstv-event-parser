@@ -72,7 +72,7 @@ func GetStreamHeadersForURL(streamURL string, existingHeaders map[string]string)
 			headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 		}
 
-	case strings.Contains(lower, "sonyliv") || strings.Contains(lower, "slivcdn") || strings.Contains(lower, "sonyeventsglobal"):
+	case strings.Contains(lower, "sonyliv") || strings.Contains(lower, "slivcdn") || strings.Contains(lower, "sonyeventsglobal") || strings.Contains(lower, "sonymtm") || strings.Contains(lower, "sony"):
 		if !hasReferer {
 			headers["Referer"] = "https://www.sonyliv.com/"
 		}
@@ -102,7 +102,7 @@ func GetStreamHeadersForURL(streamURL string, existingHeaders map[string]string)
 			headers["Origin"] = "https://cricstreams.org"
 		}
 
-	case strings.Contains(lower, "fancode") || strings.Contains(lower, "pages.dev"):
+	case strings.Contains(lower, "fancode") || strings.Contains(lower, "dai-fancode"):
 		if !hasReferer {
 			headers["Referer"] = "https://www.fancode.com/"
 		}

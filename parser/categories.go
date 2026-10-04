@@ -48,7 +48,8 @@ func GetSportCategory(event *models.TimelineEvent) string {
 	motorsportKeywords := []string{
 		"formula 1", "formula1", "formula one", "motogp", "nascar", "indycar",
 		"rally", "motorsport", "off-road", "off road", "supercars", "dakar",
-		"grand prix", "speedway",
+		"grand prix", "speedway", "gt cup", "gt world challenge", "gtwc",
+		"f1h2o", "tcr world", "fia tcr", "racing",
 	}
 	for _, kw := range motorsportKeywords {
 		if strings.Contains(combined, kw) || strings.Contains(catLower, kw) {
@@ -236,12 +237,13 @@ func GetSportCategory(event *models.TimelineEvent) string {
 		return "Football"
 	}
 
-	// Club suffix cues like " FC", " CF", " SC", " United", " City" in match title
-	if (strings.Contains(combined, " fc") || strings.Contains(combined, "fc ") ||
-		strings.Contains(combined, " cf") || strings.Contains(combined, "cf ") ||
-		strings.Contains(combined, " sc") || strings.Contains(combined, "sc ") ||
-		strings.Contains(combined, " united") || strings.Contains(combined, " city")) &&
-		(strings.Contains(combined, "vs") || strings.Contains(combined, " v ") || strings.Contains(combined, " at ")) {
+	// Club suffix cues like " FC", " CF", " SC", " United", " City" in match title or league
+	matchTitle := titleLower + " " + leagueLower
+	if (strings.Contains(matchTitle, " fc") || strings.Contains(matchTitle, "fc ") ||
+		strings.Contains(matchTitle, " cf") || strings.Contains(matchTitle, "cf ") ||
+		strings.Contains(matchTitle, " sc ") || strings.HasSuffix(matchTitle, " sc") ||
+		strings.Contains(matchTitle, " united") || strings.Contains(matchTitle, " city")) &&
+		(strings.Contains(matchTitle, "vs") || strings.Contains(matchTitle, " v ") || strings.Contains(matchTitle, " at ")) {
 		return "Football"
 	}
 

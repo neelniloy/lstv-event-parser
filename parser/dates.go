@@ -91,6 +91,29 @@ func ParseSonyDate(dateStr string) int64 {
 	return 0
 }
 
+func ParseFancodeDate(dateStr string) int64 {
+	if strings.TrimSpace(dateStr) == "" {
+		return 0
+	}
+	formats := []string{
+		"03:04:05 PM 02-01-2006",
+		"3:04:05 PM 02-01-2006",
+		"03:04:05 PM 02/01/2006",
+		"3:04:05 PM 02/01/2006",
+		"03:04 PM 02-01-2006",
+		"3:04 PM 02-01-2006",
+		"15:04:05 02-01-2006",
+		"15:04 02-01-2006",
+	}
+	for _, fmt := range formats {
+		t, err := time.ParseInLocation(fmt, strings.TrimSpace(dateStr), gmtPlus6)
+		if err == nil {
+			return t.UnixMilli()
+		}
+	}
+	return 0
+}
+
 func ParseSportsDataDate(dateStr string) int64 {
 	if strings.TrimSpace(dateStr) == "" {
 		return 0

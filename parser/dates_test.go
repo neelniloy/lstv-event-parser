@@ -38,6 +38,13 @@ func TestParseSportsDataDate(t *testing.T) {
 	}
 }
 
+func TestParseFancodeDate(t *testing.T) {
+	ts := ParseFancodeDate("07:00:00 AM 04-10-2026")
+	if ts <= 0 {
+		t.Errorf("Expected positive timestamp for Fancode date, got %d", ts)
+	}
+}
+
 func TestParseIsoDate(t *testing.T) {
 	ts := ParseIsoDate("2026-08-16T18:00:00Z")
 	if ts <= 0 {

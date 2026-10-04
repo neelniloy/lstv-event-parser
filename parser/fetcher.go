@@ -92,9 +92,11 @@ func FetchAllGlobalEvents(ctx context.Context) ([]models.TimelineEvent, error) {
 
 	cricWg.Wait()
 
-	// 2. Define the 9 event sources
+	// 2. Define the event sources
 	sources := []SourceConfig{
-		{URL: "https://raw.githubusercontent.com/srhady/tapmad-bd/refs/heads/main/tapmad_bd.json", Type: "tapmad"},
+		{URL: "https://raw.githubusercontent.com/sm-monirulislam/Tapmad_Auto_Update_Playlist/refs/heads/main/tapmad_data.json", Type: "monirul_tapmad"},
+		{URL: "https://raw.githubusercontent.com/sm-monirulislam/Fancode_Auto_Update_Playlist/refs/heads/main/fancode_data.json", Type: "fancode"},
+		{URL: "https://raw.githubusercontent.com/sm-monirulislam/SonyLiv_Event_Playlist/refs/heads/main/sonyLiv_data.json", Type: "monirul_sonyliv"},
 		{URL: "https://raw.githubusercontent.com/srhady/crichd-speical-live-event/refs/heads/main/Live_Events.json", Type: "crichd_live"},
 		{URL: "https://raw.githubusercontent.com/srhady/crichd-speical-live-event/refs/heads/main/Footy_Live.json", Type: "crichd_footy"},
 		{URL: "https://raw.githubusercontent.com/srhady/bingstream/refs/heads/main/playlist.json", Type: "bingstream"},
@@ -124,6 +126,12 @@ func FetchAllGlobalEvents(ctx context.Context) ([]models.TimelineEvent, error) {
 
 			var parsed []models.TimelineEvent
 			switch sc.Type {
+			case "monirul_tapmad":
+				parsed = ParseMonirulTapmad(body)
+			case "fancode":
+				parsed = ParseFancode(body)
+			case "monirul_sonyliv":
+				parsed = ParseMonirulSonyLiv(body)
 			case "tapmad":
 				parsed = ParseTapmad(body)
 			case "crichd_live":

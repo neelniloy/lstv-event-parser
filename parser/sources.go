@@ -978,3 +978,273 @@ func ParseSportsData(body []byte) []models.TimelineEvent {
 	}
 	return list
 }
+
+// ParseFancode parses Fancode live & upcoming sports events JSON
+func ParseFancode(body []byte) []models.TimelineEvent {
+	type FancodeMatch struct {
+		Status        string `json:"status"`
+		EventCategory string `json:"event_category"`
+		MatchID       string `json:"match_id"`
+		Title         string `json:"title"`
+		MatchName     string `json:"match_name"`
+		EventName     string `json:"event_name"`
+		Image         string `json:"image"`
+		Team1         string `json:"team_1"`
+		Team2         string `json:"team_2"`
+		StartTime     string `json:"startTime"`
+		StreamLink    string `json:"stream_link"`
+	}
+	type FancodeRoot struct {
+		Matches []FancodeMatch `json:"matches"`
+	}
+
+	var root FancodeRoot
+	if err := json.Unmarshal(body, &root); err != nil {
+		return nil
+	}
+
+	now := time.Now().UnixMilli()
+	var list []models.TimelineEvent
+
+	for _, obj := range root.Matches {
+		if isMatchFinishedStatus(obj.Status) {
+			continue
+		}
+
+		title := UnescapeHTML(obj.MatchName)
+		if title == "" {
+			title = UnescapeHTML(obj.Title)
+		}
+		title = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(title, " [English]", ""), " [Hindi]", ""))
+		if title == "" {
+			continue
+		}
+
+		isLive := strings.EqualFold(obj.Status, "LIVE")
+		startMs := ParseFancodeDate(obj.StartTime)
+		isDynamic := startMs <= 0
+		if isLive && startMs <= 0 {
+			startMs = now
+			isDynamic = true
+		}
+		if startMs <= 0 {
+			continue
+		}
+
+		var streams []models.EventStream
+		cleanURL := SanitizeStreamURL(obj.StreamLink)
+		if IsStreamPlayable(cleanURL) {
+			streams = append(streams, models.EventStream{
+				SourceName: "Fancode",
+				StreamURL:  cleanURL,
+				Type:       "hls",
+				IsM3U:      false,
+				Headers:    GetStreamHeadersForURL(cleanURL, nil),
+			})
+		}
+
+		genID := fmt.Sprintf("fancode_%s", obj.MatchID)
+		if genID == "fancode_" {
+			genID = fmt.Sprintf("fancode_%d_%d", HashString(title), startMs)
+		}
+
+		cat := obj.EventCategory
+		if cat == "" {
+			cat = "Sports"
+		}
+
+		list = append(list, models.TimelineEvent{
+			ID:                 genID,
+			Title:              title,
+			Description:        "",
+			StartTimestampMs:   startMs,
+			EndTimestampMs:     startMs + DefaultEventDurationMs,
+			ChannelID:          genID,
+			Category:           cat,
+			League:             UnescapeHTML(obj.EventName),
+			HomeTeam:           strings.TrimSpace(obj.Team1),
+			AwayTeam:           strings.TrimSpace(obj.Team2),
+			Poster:             obj.Image,
+			IsLive:             &isLive,
+			Streams:            streams,
+			IsStartTimeDynamic: isDynamic,
+		})
+	}
+	return list
+}
+
+// ParseMonirulTapmad parses the updated Tapmad sports playlist schema
+func ParseMonirulTapmad(body []byte) []models.TimelineEvent {
+	type MonirulTapmadMatch struct {
+		Status          string `json:"status"`
+		ContentEntityID any    `json:"content_entity_id"`
+		Title           string `json:"title"`
+		HeaderName      string `json:"header_name"`
+		Description     string `json:"description"`
+		StartTimeBd     string `json:"start_time_bd"`
+		Thumbnail       string `json:"thumbnail"`
+		TvImage         string `json:"tv_image"`
+		StreamURL       string `json:"stream_url"`
+	}
+	type MonirulTapmadRoot struct {
+		Matches []MonirulTapmadMatch `json:"matches"`
+	}
+
+	var root MonirulTapmadRoot
+	if err := json.Unmarshal(body, &root); err != nil {
+		return nil
+	}
+
+	now := time.Now().UnixMilli()
+	var list []models.TimelineEvent
+
+	for _, obj := range root.Matches {
+		if isMatchFinishedStatus(obj.Status) {
+			continue
+		}
+
+		title := UnescapeHTML(obj.Title)
+		if title == "" {
+			continue
+		}
+
+		isLive := strings.EqualFold(obj.Status, "LIVE")
+		startMs := ParseTapmadDate(obj.StartTimeBd)
+		isDynamic := startMs <= 0
+		if isLive && startMs <= 0 {
+			startMs = now
+			isDynamic = true
+		}
+		if startMs <= 0 {
+			continue
+		}
+
+		poster := obj.TvImage
+		if poster == "" {
+			poster = obj.Thumbnail
+		}
+
+		var streams []models.EventStream
+		cleanURL := SanitizeStreamURL(obj.StreamURL)
+		if IsStreamPlayable(cleanURL) {
+			streams = append(streams, models.EventStream{
+				SourceName: "Tapmad",
+				StreamURL:  cleanURL,
+				Type:       "hls",
+				IsM3U:      false,
+				Headers:    GetStreamHeadersForURL(cleanURL, nil),
+			})
+		}
+
+		entityIDStr := fmt.Sprintf("%v", obj.ContentEntityID)
+		genID := fmt.Sprintf("tapmad_%s", entityIDStr)
+		if entityIDStr == "" || entityIDStr == "<nil>" || entityIDStr == "0" {
+			genID = fmt.Sprintf("tapmad_%d_%d", HashString(title), startMs)
+		}
+
+		list = append(list, models.TimelineEvent{
+			ID:                 genID,
+			Title:              title,
+			Description:        UnescapeHTML(obj.Description),
+			StartTimestampMs:   startMs,
+			EndTimestampMs:     startMs + DefaultEventDurationMs,
+			ChannelID:          genID,
+			Category:           "Sports",
+			League:             UnescapeHTML(obj.HeaderName),
+			Poster:             poster,
+			IsLive:             &isLive,
+			Streams:            streams,
+			IsStartTimeDynamic: isDynamic,
+		})
+	}
+	return list
+}
+
+// ParseMonirulSonyLiv parses the SonyLiv event playlist JSON
+func ParseMonirulSonyLiv(body []byte) []models.TimelineEvent {
+	type MonirulSonyMatch struct {
+		ContentID        any    `json:"contentId"`
+		EventCategory    string `json:"event_category"`
+		Src              string `json:"src"`
+		BroadcastChannel string `json:"broadcast_channel"`
+		AudioLanguage    string `json:"audioLanguageName"`
+		EventName        string `json:"event_name"`
+		Status           string `json:"status"`
+		StreamLink       string `json:"stream_link"`
+	}
+	type MonirulSonyRoot struct {
+		Matches []MonirulSonyMatch `json:"matches"`
+	}
+
+	var root MonirulSonyRoot
+	if err := json.Unmarshal(body, &root); err != nil {
+		return nil
+	}
+
+	now := time.Now().UnixMilli()
+	var list []models.TimelineEvent
+
+	for _, obj := range root.Matches {
+		if isMatchFinishedStatus(obj.Status) {
+			continue
+		}
+
+		title := UnescapeHTML(obj.EventName)
+		if title == "" {
+			continue
+		}
+
+		isLive := strings.EqualFold(obj.Status, "LIVE")
+		cleanURL := SanitizeStreamURL(obj.StreamLink)
+		hasStream := IsStreamPlayable(cleanURL)
+
+		// Skip placeholder upcoming events that have no playable stream
+		if !isLive && !hasStream {
+			continue
+		}
+
+		var streams []models.EventStream
+		if hasStream {
+			serverLabel := "SonyLiv"
+			if obj.BroadcastChannel != "" {
+				serverLabel = fmt.Sprintf("SonyLiv - %s", obj.BroadcastChannel)
+			}
+			streams = append(streams, models.EventStream{
+				SourceName: serverLabel,
+				StreamURL:  cleanURL,
+				Type:       "hls",
+				IsM3U:      false,
+				Headers:    GetStreamHeadersForURL(cleanURL, nil),
+			})
+		}
+
+		startMs := now
+		isDynamic := true
+
+		contentIDStr := fmt.Sprintf("%v", obj.ContentID)
+		genID := fmt.Sprintf("sonyliv_%s", contentIDStr)
+		if contentIDStr == "" || contentIDStr == "<nil>" {
+			genID = fmt.Sprintf("sonyliv_%d", HashString(title))
+		}
+
+		cat := obj.EventCategory
+		if cat == "" {
+			cat = "Sports"
+		}
+
+		list = append(list, models.TimelineEvent{
+			ID:                 genID,
+			Title:              title,
+			Description:        "",
+			StartTimestampMs:   startMs,
+			EndTimestampMs:     startMs + DefaultEventDurationMs,
+			ChannelID:          genID,
+			Category:           cat,
+			Poster:             obj.Src,
+			IsLive:             &isLive,
+			Streams:            streams,
+			IsStartTimeDynamic: isDynamic,
+		})
+	}
+	return list
+}

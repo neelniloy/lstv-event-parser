@@ -12,6 +12,12 @@ import (
 
 const DefaultEventDurationMs int64 = 3 * 60 * 60 * 1000
 
+func isMatchFinishedStatus(status string) bool {
+	s := strings.TrimSpace(strings.ToUpper(status))
+	return s == "FINISHED" || s == "ENDED" || s == "FT" || s == "FULL TIME" ||
+		s == "FULLTIME" || s == "COMPLETED" || s == "POSTPONED" || s == "CANCELLED"
+}
+
 func HashString(s string) uint32 {
 	h := fnv.New32a()
 	h.Write([]byte(s))
@@ -148,6 +154,9 @@ func ParseTapmad(body []byte) []models.TimelineEvent {
 			continue
 		}
 
+		if isMatchFinishedStatus(obj.Status) {
+			continue
+		}
 		title := UnescapeHTML(obj.VideoName)
 		isLive := strings.EqualFold(obj.Status, "Live")
 		startMs := ParseTapmadDate(obj.EventStartDate)
@@ -230,6 +239,9 @@ func ParseCrichd(body []byte, sourcePrefix string, crichdStreamMap map[string]mo
 
 	var list []models.TimelineEvent
 	for _, obj := range root.Matches {
+		if isMatchFinishedStatus(obj.Status) {
+			continue
+		}
 		title := UnescapeHTML(obj.MatchName)
 		if title == "" {
 			continue
@@ -400,6 +412,9 @@ func ParseUnifiedMatchesJson(body []byte, sourcePrefix string) []models.Timeline
 	now := time.Now().UnixMilli()
 
 	for _, obj := range root.Matches {
+		if isMatchFinishedStatus(obj.Status) {
+			continue
+		}
 		title := UnescapeHTML(obj.Name)
 		if title == "" {
 			continue
@@ -418,10 +433,11 @@ func ParseUnifiedMatchesJson(body []byte, sourcePrefix string) []models.Timeline
 			startMs = ParseBingDate(obj.BdTime)
 		}
 
-		if isLive && (startMs <= 0 || startMs < now-DefaultEventDurationMs) {
-			startMs = now
-		}
 		isDynamic := startMs <= 0
+		if isLive && startMs <= 0 {
+			startMs = now
+			isDynamic = true
+		}
 		if startMs <= 0 {
 			continue
 		}
@@ -572,6 +588,9 @@ func ParseSonyLiv(body []byte) []models.TimelineEvent {
 			matchID = fmt.Sprintf("%d", HashString(title))
 		}
 
+		if isMatchFinishedStatus(raw.Status) {
+			continue
+		}
 		isLive := strings.EqualFold(raw.Status, "LIVE")
 		if raw.MatchInfo != nil && (raw.MatchInfo.IsLive || raw.MatchInfo.IsOnAir) {
 			isLive = true
@@ -588,10 +607,11 @@ func ParseSonyLiv(body []byte) []models.TimelineEvent {
 			startMs = ParseSonyDate(raw.StartTimeBd)
 		}
 
-		if isLive && (startMs <= 0 || startMs < now-DefaultEventDurationMs) {
-			startMs = now
-		}
 		isDynamic := startMs <= 0
+		if isLive && startMs <= 0 {
+			startMs = now
+			isDynamic = true
+		}
 		if startMs <= 0 {
 			continue
 		}
@@ -690,14 +710,18 @@ func ParseWillow(body []byte) []models.TimelineEvent {
 		if obj.MatchID == "" {
 			continue
 		}
+		if isMatchFinishedStatus(obj.Status) {
+			continue
+		}
 		title := UnescapeHTML(obj.Title)
 		isLive := strings.EqualFold(obj.Status, "LIVE")
 
 		startMs := ParseWillowDate(obj.TimeStr)
-		if isLive && (startMs <= 0 || startMs < now-DefaultEventDurationMs) {
-			startMs = now
-		}
 		isDynamic := startMs <= 0
+		if isLive && startMs <= 0 {
+			startMs = now
+			isDynamic = true
+		}
 		if startMs <= 0 {
 			continue
 		}
@@ -822,7 +846,7 @@ func ParseSportsData(body []byte) []models.TimelineEvent {
 	now := time.Now().UnixMilli()
 
 	for _, obj := range root.Matches {
-		if strings.EqualFold(obj.Status, "FINISHED") {
+		if isMatchFinishedStatus(obj.Status) {
 			continue
 		}
 		isLive := strings.EqualFold(obj.Status, "LIVE")
@@ -851,10 +875,11 @@ func ParseSportsData(body []byte) []models.TimelineEvent {
 		}
 
 		startMs := ParseSportsDataDate(startTimeStr)
-		if isLive && (startMs <= 0 || startMs < now-DefaultEventDurationMs) {
-			startMs = now
-		}
 		isDynamic := startMs <= 0
+		if isLive && startMs <= 0 {
+			startMs = now
+			isDynamic = true
+		}
 		if startMs <= 0 {
 			continue
 		}

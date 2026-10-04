@@ -333,28 +333,54 @@ func GetSportMaxDurationMs(category, title string) int64 {
 	titleLower := strings.ToLower(title)
 
 	switch {
-	case catLower == "cricket":
-		if strings.Contains(titleLower, "test") || strings.Contains(titleLower, "day ") {
-			return 5 * 24 * 60 * 60 * 1000 // 5 days for Test Cricket
-		}
-		if strings.Contains(titleLower, "odi") || strings.Contains(titleLower, "one day") {
-			return 12 * 60 * 60 * 1000 // 12 hours for ODI Cricket
-		}
-		return 6 * 60 * 60 * 1000 // 6 hours for T20 / League Cricket
+	case catLower == "football":
+		return 2*60*60*1000 + 30*60*1000 // 2h 30m for Football (90m + halftime + stoppage + extra time buffer)
 
-	case catLower == "golf":
-		return 4 * 24 * 60 * 60 * 1000 // 4 days for Golf Tournaments
+	case catLower == "basketball":
+		return 2*60*60*1000 + 30*60*1000 // 2h 30m for Basketball
 
 	case catLower == "tennis":
-		return 8 * 60 * 60 * 1000 // 8 hours for long Tennis matches
+		if strings.Contains(titleLower, "grand slam") || strings.Contains(titleLower, "wimbledon") ||
+			strings.Contains(titleLower, "us open") || strings.Contains(titleLower, "french open") ||
+			strings.Contains(titleLower, "australian open") {
+			return 4*60*60*1000 + 30*60*1000 // 4h 30m for best-of-5 Grand Slam matches
+		}
+		return 3 * 60 * 60 * 1000 // 3 hours for standard Tennis matches
 
-	case catLower == "football":
-		return 5 * 60 * 60 * 1000 // 5 hours for Football (covers extra time, penalties, delays)
+	case catLower == "cricket":
+		if strings.Contains(titleLower, "test") || strings.Contains(titleLower, "day ") {
+			return 7 * 60 * 60 * 1000 // 7 hours for a Day's play in Test Cricket
+		}
+		if strings.Contains(titleLower, "odi") || strings.Contains(titleLower, "one day") {
+			return 8*60*60*1000 + 30*60*1000 // 8h 30m for ODI Cricket
+		}
+		return 3*60*60*1000 + 45*60*1000 // 3h 45m for T20 / T10 / The Hundred
 
-	case catLower == "motorsport", catLower == "combat sports", catLower == "basketball", catLower == "baseball", catLower == "rugby":
-		return 6 * 60 * 60 * 1000 // 6 hours
+	case catLower == "motorsport":
+		return 2*60*60*1000 + 30*60*1000 // 2h 30m for Motorsport (F1 race limit is 2h)
+
+	case catLower == "combat sports":
+		return 3*60*60*1000 + 30*60*1000 // 3h 30m for Combat Sports (UFC/Boxing fight card)
+
+	case catLower == "baseball":
+		return 3*60*60*1000 + 30*60*1000 // 3h 30m for Baseball (9 innings)
+
+	case catLower == "ice hockey", catLower == "hockey":
+		return 2*60*60*1000 + 45*60*1000 // 2h 45m for Ice/Field Hockey
+
+	case catLower == "american football":
+		return 3*60*60*1000 + 30*60*1000 // 3h 30m for NFL / College Football
+
+	case catLower == "rugby":
+		return 2*60*60*1000 + 15*60*1000 // 2h 15m for Rugby
+
+	case catLower == "badminton", catLower == "volleyball":
+		return 2 * 60 * 60 * 1000 // 2 hours for Badminton / Volleyball
+
+	case catLower == "golf":
+		return 6 * 60 * 60 * 1000 // 6 hours for Golf round
 
 	default:
-		return 8 * 60 * 60 * 1000 // 8 hours default max duration
+		return 3 * 60 * 60 * 1000 // 3 hours default max duration
 	}
 }

@@ -96,12 +96,18 @@ func ParseSportsDataDate(dateStr string) int64 {
 		return 0
 	}
 	formats := []string{
-		"02-01-2006 03:04 PM",
-		"02-01-2006 3:04 PM",
-		"02-01-2006 15:04",
+		"02/01/2006 03:04:05 PM",
+		"02/01/2006 3:04:05 PM",
+		"02-01-2006 03:04:05 PM",
+		"02-01-2006 3:04:05 PM",
+		"02/01/2006 15:04:05",
+		"02-01-2006 15:04:05",
 		"02/01/2006 03:04 PM",
 		"02/01/2006 3:04 PM",
+		"02-01-2006 03:04 PM",
+		"02-01-2006 3:04 PM",
 		"02/01/2006 15:04",
+		"02-01-2006 15:04",
 		"2006-01-02 15:04:05",
 		"2006-01-02 15:04",
 		time.RFC3339Nano,
@@ -122,6 +128,17 @@ func ParseWillowDate(dateStr string) int64 {
 	}
 	cleaned := strings.TrimSpace(dateStr)
 	now := time.Now().In(gmtPlus6)
+
+	lower := strings.ToLower(cleaned)
+	if lower == "live now" || lower == "live" {
+		return now.UnixMilli()
+	}
+
+	if strings.HasPrefix(lower, "live at ") {
+		cleaned = strings.TrimSpace(cleaned[8:])
+	} else if strings.HasPrefix(lower, "live ") {
+		cleaned = strings.TrimSpace(cleaned[5:])
+	}
 
 	if strings.HasPrefix(strings.ToLower(cleaned), "tomorrow") {
 		timePart := strings.TrimSpace(strings.ReplaceAll(cleaned[8:], "BDT", ""))

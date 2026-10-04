@@ -164,18 +164,40 @@ func FetchAllGlobalEvents(ctx context.Context) ([]models.TimelineEvent, error) {
 
 	// 5. Filter out truly backdated events & streamless live events
 	now := time.Now().UnixMilli()
+	const finishedGracePeriodMs int64 = 20 * 60 * 1000 // 20 minutes grace period after match end
 	var finalEvents []models.TimelineEvent
 
 	for _, ev := range unifiedEvents {
-		maxDurationMs := GetSportMaxDurationMs(ev.Category, ev.Title)
-		maxEndTimeMs := ev.StartTimestampMs + maxDurationMs
+		durationMs := GetSportMaxDurationMs(ev.Category, ev.Title)
+		maxEndTimeMs := ev.StartTimestampMs + durationMs
+		if ev.EndTimestampMs > ev.StartTimestampMs && ev.EndTimestampMs < maxEndTimeMs {
+			maxEndTimeMs = ev.EndTimestampMs
+		}
 
-		// Explicit live flag or within sport-aware max live window
-		isLiveNow := (ev.IsLive != nil && *ev.IsLive) || (now >= ev.StartTimestampMs && now <= maxEndTimeMs)
-		isUpcoming := now < ev.StartTimestampMs
+		isDynamic := ev.IsStartTimeDynamic
+		isUpcoming := !isDynamic && now < ev.StartTimestampMs
+		isPastEndTime := !isDynamic && (now > maxEndTimeMs)
 
-		// Filter out stale events that ended past max sport window and are not explicitly live
-		if !isUpcoming && !isLiveNow && (ev.IsLive == nil || !*ev.IsLive) {
+		// Determine if the event is currently live:
+		// 1) Dynamic streams (24/7 channels or no fixed start time) are live if explicitly marked live.
+		// 2) Fixed-time events are live ONLY if now is between start time and realistic end time.
+		//    Even if a source feed claims it is still "LIVE", once now > maxEndTimeMs, the match is over!
+		isLiveNow := false
+		if isDynamic {
+			isLiveNow = ev.IsLive != nil && *ev.IsLive
+		} else {
+			if now >= ev.StartTimestampMs && !isPastEndTime {
+				isLiveNow = true
+			}
+		}
+
+		// Filter out events that ended past the grace period
+		if !isDynamic && (now > maxEndTimeMs+finishedGracePeriodMs) {
+			continue
+		}
+
+		// Filter out stale non-upcoming, non-live events
+		if !isUpcoming && !isLiveNow && !isDynamic {
 			continue
 		}
 
@@ -187,6 +209,11 @@ func FetchAllGlobalEvents(ctx context.Context) ([]models.TimelineEvent, error) {
 		// Set calculated IsLive status
 		liveFlag := isLiveNow
 		ev.IsLive = &liveFlag
+
+		// Ensure EndTimestampMs reflects the realistic end time
+		if ev.EndTimestampMs <= ev.StartTimestampMs || ev.EndTimestampMs > maxEndTimeMs {
+			ev.EndTimestampMs = maxEndTimeMs
+		}
 
 		finalEvents = append(finalEvents, ev)
 	}

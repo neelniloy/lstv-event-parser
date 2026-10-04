@@ -53,6 +53,57 @@ func TestGetSportCategory(t *testing.T) {
 			},
 			expected: "American Football",
 		},
+		{
+			name: "Football match incorrectly tagged as Cricket in source",
+			event: models.TimelineEvent{
+				Title:    "Liverpool vs. Calcio Como 1907",
+				Category: "Cricket",
+			},
+			expected: "Football",
+		},
+		{
+			name: "Coppa Italia match with Sports category",
+			event: models.TimelineEvent{
+				Title:    "Lazio vs Mantova",
+				League:   "Coppa Italia",
+				Category: "Sports",
+			},
+			expected: "Football",
+		},
+		{
+			name: "Tennis match in Cincinnati Open with Other category",
+			event: models.TimelineEvent{
+				Title:    "Janice Tjen vs Viktorija Golubic",
+				League:   "Cincinnati open",
+				Category: "Other",
+			},
+			expected: "Tennis",
+		},
+		{
+			name: "Padel match tagged as Cricket in source",
+			event: models.TimelineEvent{
+				Title:    "Game Changer Lions Vs Aussie Mavericks Jaguars",
+				League:   "World Padel League 2026",
+				Category: "Cricket",
+			},
+			expected: "Tennis",
+		},
+		{
+			name: "Caribbean Premier League remains Cricket",
+			event: models.TimelineEvent{
+				Title:  "St Lucia Kings Vs Barbados Tridents",
+				League: "Caribbean Premier League 2026",
+			},
+			expected: "Cricket",
+		},
+		{
+			name: "Hockey World Cup match",
+			event: models.TimelineEvent{
+				Title:  "Pakistan vs Wales",
+				League: "FIH Hockey World Cup",
+			},
+			expected: "Hockey",
+		},
 	}
 
 	for _, tt := range tests {

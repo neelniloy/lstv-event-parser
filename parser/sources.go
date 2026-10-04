@@ -770,7 +770,7 @@ func ParseWillow(body []byte) []models.TimelineEvent {
 			StartTimestampMs:   startMs,
 			EndTimestampMs:     startMs + DefaultEventDurationMs,
 			ChannelID:          genID,
-			Category:           "Cricket",
+			Category:           "Sports",
 			Poster:             obj.CoverImage,
 			IsLive:             &isLive,
 			Streams:            streams,

@@ -32,9 +32,7 @@ func IsStreamPlayable(rawURL string) bool {
 	return strings.Contains(lower, ".m3u8") ||
 		strings.Contains(lower, ".mpd") ||
 		strings.Contains(lower, ".mp4") ||
-		strings.Contains(lower, ".ts") ||
-		strings.Contains(lower, "playerado.top") ||
-		strings.Contains(lower, "cricstreams.org")
+		strings.Contains(lower, ".ts")
 }
 
 func GetStreamHeadersForURL(streamURL string, existingHeaders map[string]string) map[string]string {

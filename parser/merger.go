@@ -12,6 +12,8 @@ import (
 
 var nonAlphanumericRegex = regexp.MustCompile(`[^a-z0-9]`)
 
+var countrySuffixRegex = regexp.MustCompile(`(?i)\s*\([a-z0-9\s]+\)\s*`)
+
 var teamAliases = map[string]string{
 	// Football
 	"manutd":            "manchesterunited",
@@ -22,6 +24,8 @@ var teamAliases = map[string]string{
 	"atleticomadrid":    "atletico",
 	"parissaintgermain": "psg",
 	"parissg":           "psg",
+	"ol":                "olympiquelyonnais",
+	"lyon":              "olympiquelyonnais",
 	"juve":              "juventus",
 	"inter":             "intermilan",
 	"acmilan":           "milan",
@@ -41,6 +45,32 @@ var teamAliases = map[string]string{
 	"wolves":           "wolverhampton",
 	"nottinghamforest":  "nottingham",
 	"sheffieldunited":   "sheffieldutd",
+	"mohunbagan":        "mohunbagansupergiant",
+	"mohunbagansg":      "mohunbagansupergiant",
+	"chennaiyin":        "chennaiyinfc",
+	"alittihad":         "alittihad",
+	"alittihadclub":     "alittihad",
+	"pakhtakor":         "pakhtakortashkent",
+	"alqadisiyah":       "alqadsiah",
+	"alqadsiahclub":     "alqadsiah",
+	"alsadd":            "alsadd",
+	"alsaddsc":          "alsadd",
+	"alain":             "alain",
+	"alainfc":           "alain",
+	"tractor":           "tractor",
+	"tractorfc":         "tractor",
+	"airforcesc":        "alquwaaljawiya",
+	"airforce":          "alquwaaljawiya",
+	"neftchi":           "neftchifergana",
+	"pfcneftchi":        "neftchifergana",
+	"alahli":            "alahli",
+	"alahlisaudi":       "alahli",
+	"alahlisaudifc":     "alahli",
+	"algharafa":         "algharafa",
+	"algharafafc":       "algharafa",
+	"sevillafc":         "sevilla",
+	"caosasuna":         "osasuna",
+	"osasunaca":         "osasuna",
 
 	// Baseball / US Sports
 	"texasrangers": "rangers",
@@ -96,9 +126,21 @@ func CleanTitleNoise(title string) string {
 }
 
 func NormalizeTeamName(name string) string {
-	cleaned := nonAlphanumericRegex.ReplaceAllString(strings.ToLower(name), "")
+	// Strip country/region in parentheses like (UZB), (KSA), (UAE), (IRN), (QAT), etc.
+	withoutCountry := countrySuffixRegex.ReplaceAllString(name, " ")
+	cleaned := nonAlphanumericRegex.ReplaceAllString(strings.ToLower(withoutCountry), "")
 	if alias, found := teamAliases[cleaned]; found {
 		return alias
+	}
+	// Strip common trailing club tokens if present
+	for _, suffix := range []string{"club", "fc", "cf", "sc"} {
+		if strings.HasSuffix(cleaned, suffix) && len(cleaned) > len(suffix)+3 {
+			trimmed := strings.TrimSuffix(cleaned, suffix)
+			if alias, found := teamAliases[trimmed]; found {
+				return alias
+			}
+			return trimmed
+		}
 	}
 	return cleaned
 }

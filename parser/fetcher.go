@@ -170,12 +170,22 @@ func FetchAllGlobalEvents(ctx context.Context) ([]models.TimelineEvent, error) {
 	// 4. Merge & Deduplicate
 	unifiedEvents := MergeAndDeduplicate(allEvents, fetchTime)
 
-	// 5. Filter out truly backdated events & streamless live events
+	// 5. Filter out truly backdated events, streamless events, and expired streams
 	now := time.Now().UnixMilli()
-	const finishedGracePeriodMs int64 = 20 * 60 * 1000 // 20 minutes grace period after match end
+	const maxUpcomingWindowMs int64 = 36 * 60 * 60 * 1000 // Only show upcoming events within next 36 hours
 	var finalEvents []models.TimelineEvent
 
 	for _, ev := range unifiedEvents {
+		// Filter out ANY event without valid playable streams
+		if len(ev.Streams) == 0 {
+			continue
+		}
+
+		// Filter out placeholder or fake events
+		if IsPlaceholderEvent(ev.Title, ev.HomeTeam, ev.AwayTeam) {
+			continue
+		}
+
 		durationMs := GetSportMaxDurationMs(ev.Category, ev.Title)
 		maxEndTimeMs := ev.StartTimestampMs + durationMs
 		if ev.EndTimestampMs > ev.StartTimestampMs && ev.EndTimestampMs < maxEndTimeMs {
@@ -184,33 +194,40 @@ func FetchAllGlobalEvents(ctx context.Context) ([]models.TimelineEvent, error) {
 
 		isDynamic := ev.IsStartTimeDynamic
 		isUpcoming := !isDynamic && now < ev.StartTimestampMs
-		isPastEndTime := !isDynamic && (now > maxEndTimeMs)
+
+		// Filter out upcoming events too far in the future
+		if !isDynamic && ev.StartTimestampMs > now+maxUpcomingWindowMs {
+			continue
+		}
 
 		// Determine if the event is currently live:
-		// 1) Dynamic streams (24/7 channels or no fixed start time) are live if explicitly marked live.
-		// 2) Fixed-time events are live ONLY if now is between start time and realistic end time.
-		//    Even if a source feed claims it is still "LIVE", once now > maxEndTimeMs, the match is over!
+		// 1) Dynamic streams are live only if explicitly marked live and within duration limit.
+		// 2) Fixed-time events are live only if now is between start time and realistic max end time.
+		//    If upstream feed explicitly marks match as not live (isLive == false) after normal start window, respect that it ended.
 		isLiveNow := false
 		if isDynamic {
-			isLiveNow = ev.IsLive != nil && *ev.IsLive
+			isLiveNow = ev.IsLive != nil && *ev.IsLive && now <= maxEndTimeMs
 		} else {
-			if now >= ev.StartTimestampMs && !isPastEndTime {
-				isLiveNow = true
+			if now >= ev.StartTimestampMs && now <= maxEndTimeMs {
+				if ev.IsLive != nil {
+					if *ev.IsLive {
+						isLiveNow = true
+					} else {
+						// Source explicitly says event is not live / ended
+						if now < ev.StartTimestampMs+15*60*1000 {
+							isLiveNow = true
+						} else {
+							isLiveNow = false
+						}
+					}
+				} else {
+					isLiveNow = true
+				}
 			}
 		}
 
-		// Filter out events that ended past the grace period
-		if !isDynamic && (now > maxEndTimeMs+finishedGracePeriodMs) {
-			continue
-		}
-
-		// Filter out stale non-upcoming, non-live events
-		if !isUpcoming && !isLiveNow && !isDynamic {
-			continue
-		}
-
-		// Filter out live events with no valid playable streams
-		if isLiveNow && len(ev.Streams) == 0 {
+		// Filter out events that are not upcoming and no longer live (stream or match finished)
+		if !isUpcoming && !isLiveNow {
 			continue
 		}
 

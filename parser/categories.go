@@ -152,7 +152,7 @@ func GetSportCategory(event *models.TimelineEvent) string {
 		return "American Football"
 	}
 
-	// 9. Badminton, Volleyball, Esports
+	// 9. Badminton, Volleyball, Esports, Cue Sports
 	if strings.Contains(combined, "badminton") || containsWord(combined, "bwf") {
 		return "Badminton"
 	}
@@ -163,6 +163,12 @@ func GetSportCategory(event *models.TimelineEvent) string {
 		strings.Contains(combined, "cs:go") || strings.Contains(combined, "cs2") ||
 		strings.Contains(combined, "dota 2") || strings.Contains(combined, "league of legends") {
 		return "Esports"
+	}
+	cueKeywords := []string{"snooker", "billiard", "billiards", "predator pro", "predator european", "9-ball", "8-ball", "world pool"}
+	for _, kw := range cueKeywords {
+		if strings.Contains(combined, kw) || strings.Contains(catLower, kw) {
+			return "Other Sports"
+		}
 	}
 
 	// 10. Distinct Cricket Tournaments, Leagues & Cues
@@ -336,42 +342,42 @@ func GetSportMaxDurationMs(category, title string) int64 {
 
 	switch {
 	case catLower == "football":
-		return 2*60*60*1000 + 30*60*1000 // 2h 30m for Football (90m + halftime + stoppage + extra time buffer)
+		return 2*60*60*1000 + 10*60*1000 // 2h 10m for Football (90m + 15m halftime + stoppage buffer)
 
 	case catLower == "basketball":
-		return 2*60*60*1000 + 30*60*1000 // 2h 30m for Basketball
+		return 2*60*60*1000 + 15*60*1000 // 2h 15m for Basketball (48m + timeouts/halftime buffer)
 
 	case catLower == "tennis":
 		if strings.Contains(titleLower, "grand slam") || strings.Contains(titleLower, "wimbledon") ||
 			strings.Contains(titleLower, "us open") || strings.Contains(titleLower, "french open") ||
 			strings.Contains(titleLower, "australian open") {
-			return 4*60*60*1000 + 30*60*1000 // 4h 30m for best-of-5 Grand Slam matches
+			return 4 * 60 * 60 * 1000 // 4 hours for best-of-5 Grand Slam matches
 		}
-		return 3 * 60 * 60 * 1000 // 3 hours for standard Tennis matches
+		return 2*60*60*1000 + 45*60*1000 // 2h 45m for standard Tennis matches
 
 	case catLower == "cricket":
 		if strings.Contains(titleLower, "test") || strings.Contains(titleLower, "day ") {
 			return 7 * 60 * 60 * 1000 // 7 hours for a Day's play in Test Cricket
 		}
 		if strings.Contains(titleLower, "odi") || strings.Contains(titleLower, "one day") {
-			return 8*60*60*1000 + 30*60*1000 // 8h 30m for ODI Cricket
+			return 8 * 60 * 60 * 1000 // 8 hours for ODI Cricket
 		}
-		return 3*60*60*1000 + 45*60*1000 // 3h 45m for T20 / T10 / The Hundred
+		return 3*60*60*1000 + 15*60*1000 // 3h 15m for T20 / T10 / The Hundred
 
 	case catLower == "motorsport":
-		return 2*60*60*1000 + 30*60*1000 // 2h 30m for Motorsport (F1 race limit is 2h)
+		return 2*60*60*1000 + 10*60*1000 // 2h 10m for Motorsport (F1 race limit is 2h)
 
 	case catLower == "combat sports":
-		return 3*60*60*1000 + 30*60*1000 // 3h 30m for Combat Sports (UFC/Boxing fight card)
+		return 3 * 60 * 60 * 1000 // 3 hours for Combat Sports fight card
 
 	case catLower == "baseball":
-		return 3*60*60*1000 + 30*60*1000 // 3h 30m for Baseball (9 innings)
+		return 3*60*60*1000 + 15*60*1000 // 3h 15m for Baseball (9 innings)
 
 	case catLower == "ice hockey", catLower == "hockey":
-		return 2*60*60*1000 + 45*60*1000 // 2h 45m for Ice/Field Hockey
+		return 2*60*60*1000 + 30*60*1000 // 2h 30m for Ice/Field Hockey
 
 	case catLower == "american football":
-		return 3*60*60*1000 + 30*60*1000 // 3h 30m for NFL / College Football
+		return 3*60*60*1000 + 15*60*1000 // 3h 15m for NFL / College Football
 
 	case catLower == "rugby":
 		return 2*60*60*1000 + 15*60*1000 // 2h 15m for Rugby

@@ -42,6 +42,22 @@ func TestGetMatchKey(t *testing.T) {
 			},
 			expected: "barcelona_vs_realmadrid",
 		},
+		{
+			name: "Country Tag in Parentheses Normalization",
+			event: models.TimelineEvent{
+				HomeTeam: "Al Ain FC (UAE)",
+				AwayTeam: "Tractor FC (IRN)",
+			},
+			expected: "alain_vs_tractor",
+		},
+		{
+			name: "French Club Aliases Normalization",
+			event: models.TimelineEvent{
+				HomeTeam: "PSG",
+				AwayTeam: "OL",
+			},
+			expected: "olympiquelyonnais_vs_psg",
+		},
 	}
 
 	for _, tt := range tests {
@@ -49,6 +65,61 @@ func TestGetMatchKey(t *testing.T) {
 			key := GetMatchKey(&tt.event)
 			if key != tt.expected {
 				t.Errorf("GetMatchKey() = %v, want %v", key, tt.expected)
+			}
+		})
+	}
+}
+
+func TestIsPlaceholderEvent(t *testing.T) {
+	tests := []struct {
+		name     string
+		title    string
+		homeTeam string
+		awayTeam string
+		expected bool
+	}{
+		{
+			name:     "Identical Home and Away Teams",
+			title:    "MotorGP Vs MotorGP",
+			homeTeam: "MotorGP",
+			awayTeam: "MotorGP",
+			expected: true,
+		},
+		{
+			name:     "Generic Evento Placeholder",
+			title:    "TENNIS | EVENTO  Vs TENNIS | EVENTO",
+			homeTeam: "TENNIS | EVENTO",
+			awayTeam: "TENNIS | EVENTO",
+			expected: true,
+		},
+		{
+			name:     "Generic Sports Live Placeholder",
+			title:    "SPORTS LIVE Vs SPORTS LIVE",
+			homeTeam: "SPORTS LIVE",
+			awayTeam: "SPORTS LIVE",
+			expected: true,
+		},
+		{
+			name:     "Tennis Court Name Placeholder",
+			title:    "Centre Court",
+			homeTeam: "",
+			awayTeam: "",
+			expected: true,
+		},
+		{
+			name:     "Real Match Event",
+			title:    "Arsenal vs Chelsea",
+			homeTeam: "Arsenal",
+			awayTeam: "Chelsea",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := IsPlaceholderEvent(tt.title, tt.homeTeam, tt.awayTeam)
+			if got != tt.expected {
+				t.Errorf("IsPlaceholderEvent(%q, %q, %q) = %v, want %v", tt.title, tt.homeTeam, tt.awayTeam, got, tt.expected)
 			}
 		})
 	}

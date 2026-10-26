@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
+	"regexp"
 	"strings"
 	"time"
 
@@ -15,7 +16,40 @@ const DefaultEventDurationMs int64 = 3 * 60 * 60 * 1000
 func isMatchFinishedStatus(status string) bool {
 	s := strings.TrimSpace(strings.ToUpper(status))
 	return s == "FINISHED" || s == "ENDED" || s == "FT" || s == "FULL TIME" ||
-		s == "FULLTIME" || s == "COMPLETED" || s == "POSTPONED" || s == "CANCELLED"
+		s == "FULLTIME" || s == "COMPLETED" || s == "POSTPONED" || s == "CANCELLED" ||
+		s == "FINAL" || s == "RESULT" || s == "ABANDONED" || s == "CONCLUDED" ||
+		s == "OVER" || s == "CLOSED" || s == "OFFICIAL" || s == "TERMINATED" ||
+		s == "WALKOVER" || s == "RETIRED" || s == "POST" || s == "END"
+}
+
+func IsPlaceholderEvent(title, homeTeam, awayTeam string) bool {
+	h := NormalizeTeamName(homeTeam)
+	a := NormalizeTeamName(awayTeam)
+	if h != "" && a != "" && h == a {
+		return true
+	}
+	tUpper := strings.ToUpper(title)
+	if strings.Contains(tUpper, "EVENTO") ||
+		strings.Contains(tUpper, "SPORTS LIVE") ||
+		strings.EqualFold(title, "Centre Court") ||
+		strings.EqualFold(title, "Glaubandich Court") {
+		return true
+	}
+	tLower := strings.ToLower(title)
+	splitters := []string{" vs ", " vs. ", " v "}
+	for _, spl := range splitters {
+		if strings.Contains(tLower, spl) {
+			parts := strings.Split(tLower, spl)
+			if len(parts) == 2 {
+				t1 := NormalizeTeamName(parts[0])
+				t2 := NormalizeTeamName(parts[1])
+				if t1 != "" && t2 != "" && t1 == t2 {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func HashString(s string) uint32 {
@@ -184,6 +218,10 @@ func ParseTapmad(body []byte) []models.TimelineEvent {
 			})
 		}
 
+		if len(streams) == 0 || IsPlaceholderEvent(title, "", "") {
+			continue
+		}
+
 		cat := obj.CategoryName
 		if cat == "" {
 			cat = "Sports"
@@ -243,7 +281,7 @@ func ParseCrichd(body []byte, sourcePrefix string, crichdStreamMap map[string]mo
 			continue
 		}
 		title := UnescapeHTML(obj.MatchName)
-		if title == "" {
+		if title == "" || IsPlaceholderEvent(title, obj.Team1Name, obj.Team2Name) {
 			continue
 		}
 
@@ -256,11 +294,7 @@ func ParseCrichd(body []byte, sourcePrefix string, crichdStreamMap map[string]mo
 		}
 		isDynamic := strings.EqualFold(obj.StartTime, "N/A") || startMs <= 0
 		if startMs <= 0 {
-			if isLive {
-				startMs = time.Now().UnixMilli()
-			} else {
-				continue
-			}
+			continue
 		}
 
 		var streams []models.EventStream
@@ -281,7 +315,7 @@ func ParseCrichd(body []byte, sourcePrefix string, crichdStreamMap map[string]mo
 					if idx := strings.Index(streamURL, idParam); idx != -1 {
 						idVal := strings.Split(streamURL[idx+len(idParam):], "&")[0]
 						if idVal != "" {
-							if res, ok := LookupCrichdStream(crichdStreamMap, idVal, chName); ok {
+							if res, ok := LookupCrichdStream(crichdStreamMap, idVal, chName); ok && IsStreamPlayable(res.Link) {
 								headers := make(map[string]string)
 								if res.Referer != "" {
 									headers["Referer"] = res.Referer
@@ -297,23 +331,6 @@ func ParseCrichd(body []byte, sourcePrefix string, crichdStreamMap map[string]mo
 								streams = append(streams, models.EventStream{
 									SourceName: chName,
 									StreamURL:  res.Link,
-									Type:       "hls",
-									IsM3U:      false,
-									Headers:    headers,
-								})
-								resolved = true
-							} else {
-								fallbackURL := fmt.Sprintf("https://crichd.johirxofficial.workers.dev/live/%s.m3u8", idVal)
-								headers := make(map[string]string)
-								if obj.Referer != "" {
-									headers["Referer"] = obj.Referer
-								}
-								if obj.UserAgent != "" {
-									headers["User-Agent"] = obj.UserAgent
-								}
-								streams = append(streams, models.EventStream{
-									SourceName: chName,
-									StreamURL:  fallbackURL,
 									Type:       "hls",
 									IsM3U:      false,
 									Headers:    headers,
@@ -340,6 +357,10 @@ func ParseCrichd(body []byte, sourcePrefix string, crichdStreamMap map[string]mo
 					})
 				}
 			}
+		}
+
+		if len(streams) == 0 {
+			continue
 		}
 
 		genID := fmt.Sprintf("%s_%d_%d", strings.ToLower(sourcePrefix), HashString(title), startMs)
@@ -483,6 +504,10 @@ func ParseUnifiedMatchesJson(body []byte, sourcePrefix string) []models.Timeline
 					Headers:    itemHeaders,
 				})
 			}
+		}
+
+		if len(streams) == 0 || IsPlaceholderEvent(title, obj.LocalteamName, obj.VisitorteamName) {
+			continue
 		}
 
 		genID := fmt.Sprintf("%s_%d_%d", sourcePrefix, HashString(title), startMs)
@@ -653,6 +678,10 @@ func ParseSonyLiv(body []byte) []models.TimelineEvent {
 			genID = fmt.Sprintf("sony_%s_dynamic", matchID)
 		}
 
+		if len(streams) == 0 || IsPlaceholderEvent(title, raw.HomeTeam, raw.AwayTeam) {
+			continue
+		}
+
 		cat := "Sports"
 		if raw.MatchInfo != nil && len(raw.MatchInfo.Genres) > 0 {
 			cat = raw.MatchInfo.Genres[0]
@@ -782,6 +811,10 @@ func ParseWillow(body []byte) []models.TimelineEvent {
 			}
 		}
 
+		if len(streams) == 0 || IsPlaceholderEvent(title, "", "") {
+			continue
+		}
+
 		genID := fmt.Sprintf("willow_%s", obj.MatchID)
 		if isDynamic {
 			genID = fmt.Sprintf("willow_%s_dynamic", obj.MatchID)
@@ -870,7 +903,7 @@ func ParseSportsData(body []byte) []models.TimelineEvent {
 		} else if leagueName != "" {
 			title = leagueName
 		}
-		if title == "" {
+		if title == "" || IsPlaceholderEvent(title, homeTeam, awayTeam) {
 			continue
 		}
 
@@ -952,6 +985,10 @@ func ParseSportsData(body []byte) []models.TimelineEvent {
 			}
 		}
 
+		if len(streams) == 0 {
+			continue
+		}
+
 		genID := fmt.Sprintf("sportsdata_%d_%d", HashString(title), startMs)
 		cat := obj.Category
 		if cat == "" {
@@ -1016,7 +1053,7 @@ func ParseFancode(body []byte) []models.TimelineEvent {
 			title = UnescapeHTML(obj.Title)
 		}
 		title = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(title, " [English]", ""), " [Hindi]", ""))
-		if title == "" {
+		if title == "" || IsPlaceholderEvent(title, obj.Team1, obj.Team2) {
 			continue
 		}
 
@@ -1041,6 +1078,10 @@ func ParseFancode(body []byte) []models.TimelineEvent {
 				IsM3U:      false,
 				Headers:    GetStreamHeadersForURL(cleanURL, nil),
 			})
+		}
+
+		if len(streams) == 0 {
+			continue
 		}
 
 		genID := fmt.Sprintf("fancode_%s", obj.MatchID)
@@ -1104,7 +1145,7 @@ func ParseMonirulTapmad(body []byte) []models.TimelineEvent {
 		}
 
 		title := UnescapeHTML(obj.Title)
-		if title == "" {
+		if title == "" || IsPlaceholderEvent(title, "", "") {
 			continue
 		}
 
@@ -1134,6 +1175,10 @@ func ParseMonirulTapmad(body []byte) []models.TimelineEvent {
 				IsM3U:      false,
 				Headers:    GetStreamHeadersForURL(cleanURL, nil),
 			})
+		}
+
+		if len(streams) == 0 {
+			continue
 		}
 
 		entityIDStr := fmt.Sprintf("%v", obj.ContentEntityID)
@@ -1169,6 +1214,7 @@ func ParseMonirulSonyLiv(body []byte) []models.TimelineEvent {
 		BroadcastChannel string `json:"broadcast_channel"`
 		AudioLanguage    string `json:"audioLanguageName"`
 		EventName        string `json:"event_name"`
+		MatchName        string `json:"match_name"`
 		Status           string `json:"status"`
 		StreamLink       string `json:"stream_link"`
 	}
@@ -1183,40 +1229,71 @@ func ParseMonirulSonyLiv(body []byte) []models.TimelineEvent {
 
 	now := time.Now().UnixMilli()
 	var list []models.TimelineEvent
+	langRegex := regexp.MustCompile(`(?i)\s*\[(ENG|HIN|BEN|MAL|TEL|TAM|KAN)\]`)
+	dateRegex := regexp.MustCompile(`(?i)\s*-\s*\d{1,2}\s+[a-z]{3}\s+\d{4}`)
 
 	for _, obj := range root.Matches {
 		if isMatchFinishedStatus(obj.Status) {
 			continue
 		}
 
-		title := UnescapeHTML(obj.EventName)
+		cleanURL := SanitizeStreamURL(obj.StreamLink)
+		hasStream := IsStreamPlayable(cleanURL)
+		if !hasStream {
+			continue
+		}
+
+		rawTitle := strings.TrimSpace(obj.MatchName)
+		if rawTitle == "" {
+			rawTitle = strings.TrimSpace(obj.EventName)
+		}
+		rawTitle = UnescapeHTML(rawTitle)
+		if rawTitle == "" {
+			continue
+		}
+
+		title := langRegex.ReplaceAllString(rawTitle, "")
+		title = strings.TrimSpace(dateRegex.ReplaceAllString(title, ""))
 		if title == "" {
+			title = rawTitle
+		}
+
+		var homeTeam, awayTeam string
+		tLower := strings.ToLower(title)
+		for _, spl := range []string{" vs ", " vs. ", " v "} {
+			if strings.Contains(tLower, spl) {
+				parts := strings.Split(title, spl)
+				if len(parts) == 2 {
+					homeTeam = strings.TrimSpace(parts[0])
+					awayTeam = strings.TrimSpace(parts[1])
+				}
+				break
+			}
+		}
+
+		if IsPlaceholderEvent(title, homeTeam, awayTeam) {
 			continue
 		}
 
 		isLive := strings.EqualFold(obj.Status, "LIVE")
-		cleanURL := SanitizeStreamURL(obj.StreamLink)
-		hasStream := IsStreamPlayable(cleanURL)
 
-		// Skip placeholder upcoming events that have no playable stream
-		if !isLive && !hasStream {
-			continue
+		serverLabel := "SonyLiv"
+		if obj.BroadcastChannel != "" {
+			if obj.AudioLanguage != "" {
+				serverLabel = fmt.Sprintf("SonyLiv - %s [%s]", obj.BroadcastChannel, obj.AudioLanguage)
+			} else {
+				serverLabel = fmt.Sprintf("SonyLiv - %s", obj.BroadcastChannel)
+			}
 		}
 
 		var streams []models.EventStream
-		if hasStream {
-			serverLabel := "SonyLiv"
-			if obj.BroadcastChannel != "" {
-				serverLabel = fmt.Sprintf("SonyLiv - %s", obj.BroadcastChannel)
-			}
-			streams = append(streams, models.EventStream{
-				SourceName: serverLabel,
-				StreamURL:  cleanURL,
-				Type:       "hls",
-				IsM3U:      false,
-				Headers:    GetStreamHeadersForURL(cleanURL, nil),
-			})
-		}
+		streams = append(streams, models.EventStream{
+			SourceName: serverLabel,
+			StreamURL:  cleanURL,
+			Type:       "hls",
+			IsM3U:      false,
+			Headers:    GetStreamHeadersForURL(cleanURL, nil),
+		})
 
 		startMs := now
 		isDynamic := true
@@ -1240,6 +1317,9 @@ func ParseMonirulSonyLiv(body []byte) []models.TimelineEvent {
 			EndTimestampMs:     startMs + DefaultEventDurationMs,
 			ChannelID:          genID,
 			Category:           cat,
+			League:             UnescapeHTML(obj.EventName),
+			HomeTeam:           homeTeam,
+			AwayTeam:           awayTeam,
 			Poster:             obj.Src,
 			IsLive:             &isLive,
 			Streams:            streams,

@@ -159,3 +159,16 @@ func TestMergeAndDeduplicate(t *testing.T) {
 		t.Errorf("Expected 2 combined streams, got %d", len(merged[0].Streams))
 	}
 }
+
+func TestIsMatchingEventTournamentDayDoesNotSwallowMatches(t *testing.T) {
+	day := models.TimelineEvent{Title: "Hong Kong Sixes - Day 1", StartTimestampMs: 1_000_000}
+	match := models.TimelineEvent{Title: "Hong Kong Sixes 2026 - 6th Match - Bangladesh vs Sri Lanka", StartTimestampMs: 1_000_000}
+	if IsMatchingEvent(&day, &match) {
+		t.Errorf("tournament day event should not merge with an individual match")
+	}
+
+	fancode := models.TimelineEvent{Title: "Bangladesh vs Sri Lanka", HomeTeam: "Bangladesh", AwayTeam: "Sri Lanka", StartTimestampMs: 1_000_000}
+	if !IsMatchingEvent(&fancode, &match) {
+		t.Errorf("same match from two sources should merge")
+	}
+}

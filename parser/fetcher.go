@@ -169,6 +169,7 @@ func FetchAllGlobalEvents(ctx context.Context) ([]models.TimelineEvent, error) {
 
 	// 4. Merge & Deduplicate
 	unifiedEvents := MergeAndDeduplicate(allEvents, fetchTime)
+	DeprioritizeSharedStreams(unifiedEvents)
 
 	// 5. Filter out truly backdated events, streamless events, and expired streams
 	now := time.Now().UnixMilli()

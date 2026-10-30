@@ -197,8 +197,10 @@ func IsMatchingEvent(existing, event *models.TimelineEvent) bool {
 		return true
 	}
 
-	// 2. Substring key match (e.g. australia_vs_bangladesh vs 1sttestaustralia_vs_bangladesh)
-	if len(key1) >= 5 && len(key2) >= 5 {
+	// 2. Substring key match (e.g. australia_vs_bangladesh vs 1sttestaustralia_vs_bangladesh).
+	// Both keys must be team keys, otherwise a tournament-only key like "hongkongsixes" (from
+	// "Hong Kong Sixes - Day 1") would swallow every individual match of that tournament.
+	if len(key1) >= 5 && len(key2) >= 5 && strings.Contains(key1, "_vs_") && strings.Contains(key2, "_vs_") {
 		if strings.Contains(key1, key2) || strings.Contains(key2, key1) {
 			return true
 		}
@@ -344,4 +346,30 @@ func MergeAndDeduplicate(events []models.TimelineEvent, fetchTime int64) []model
 	}
 
 	return mergedList
+}
+
+// DeprioritizeSharedStreams moves streams whose URL appears in more than one event to the end of
+// each event's list. Such URLs are tournament channels (e.g. Fancode lists every Hong Kong Sixes
+// match with the same feed), which may be showing a different match than the card says.
+func DeprioritizeSharedStreams(events []models.TimelineEvent) {
+	urlCount := make(map[string]int)
+	for _, ev := range events {
+		for _, s := range ev.Streams {
+			urlCount[s.StreamURL]++
+		}
+	}
+
+	for i := range events {
+		var dedicated, shared []models.EventStream
+		for _, s := range events[i].Streams {
+			if urlCount[s.StreamURL] > 1 {
+				shared = append(shared, s)
+			} else {
+				dedicated = append(dedicated, s)
+			}
+		}
+		if len(dedicated) > 0 && len(shared) > 0 {
+			events[i].Streams = append(dedicated, shared...)
+		}
+	}
 }

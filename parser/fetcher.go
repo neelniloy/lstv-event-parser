@@ -173,7 +173,7 @@ func FetchAllGlobalEvents(ctx context.Context) ([]models.TimelineEvent, error) {
 
 	// 5. Filter out truly backdated events, streamless events, and expired streams
 	now := time.Now().UnixMilli()
-	const maxUpcomingWindowMs int64 = 72 * 60 * 60 * 1000 // Only show upcoming events within next 72 hours
+	const maxUpcomingWindowMs int64 = 36 * 60 * 60 * 1000 // Only show upcoming events within next 36 hours
 	var finalEvents []models.TimelineEvent
 
 	for _, ev := range unifiedEvents {

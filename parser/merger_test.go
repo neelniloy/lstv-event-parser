@@ -172,3 +172,19 @@ func TestIsMatchingEventTournamentDayDoesNotSwallowMatches(t *testing.T) {
 		t.Errorf("same match from two sources should merge")
 	}
 }
+
+func TestRemoveSharedStreams(t *testing.T) {
+	shared := models.EventStream{StreamURL: "https://cdn/tournament.mpd"}
+	events := []models.TimelineEvent{
+		{Title: "Bangladesh vs Sri Lanka", Streams: []models.EventStream{{StreamURL: "https://cdn/bansl.mpd"}, shared}},
+		{Title: "India vs Pakistan", Streams: []models.EventStream{shared}},
+	}
+	RemoveSharedStreams(events)
+
+	if len(events[0].Streams) != 1 || events[0].Streams[0].StreamURL != "https://cdn/bansl.mpd" {
+		t.Errorf("shared stream should be removed when a dedicated one exists, got %+v", events[0].Streams)
+	}
+	if len(events[1].Streams) != 1 {
+		t.Errorf("shared stream should be kept when it is the only one, got %+v", events[1].Streams)
+	}
+}

@@ -348,10 +348,11 @@ func MergeAndDeduplicate(events []models.TimelineEvent, fetchTime int64) []model
 	return mergedList
 }
 
-// DeprioritizeSharedStreams moves streams whose URL appears in more than one event to the end of
-// each event's list. Such URLs are tournament channels (e.g. Fancode lists every Hong Kong Sixes
-// match with the same feed), which may be showing a different match than the card says.
-func DeprioritizeSharedStreams(events []models.TimelineEvent) {
+// RemoveSharedStreams drops streams whose URL appears in more than one event from events that
+// also have a dedicated stream. Such URLs are tournament channels (e.g. Fancode lists every Hong Kong
+// Sixes match with the same feed), which may be showing a different match than the card says.
+// Events with only shared streams keep them as a fallback.
+func RemoveSharedStreams(events []models.TimelineEvent) {
 	urlCount := make(map[string]int)
 	for _, ev := range events {
 		for _, s := range ev.Streams {
@@ -369,7 +370,7 @@ func DeprioritizeSharedStreams(events []models.TimelineEvent) {
 			}
 		}
 		if len(dedicated) > 0 && len(shared) > 0 {
-			events[i].Streams = append(dedicated, shared...)
+			events[i].Streams = dedicated
 		}
 	}
 }

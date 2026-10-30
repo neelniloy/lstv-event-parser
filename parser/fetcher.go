@@ -172,15 +172,10 @@ func FetchAllGlobalEvents(ctx context.Context) ([]models.TimelineEvent, error) {
 
 	// 5. Filter out truly backdated events, streamless events, and expired streams
 	now := time.Now().UnixMilli()
-	const maxUpcomingWindowMs int64 = 36 * 60 * 60 * 1000 // Only show upcoming events within next 36 hours
+	const maxUpcomingWindowMs int64 = 72 * 60 * 60 * 1000 // Only show upcoming events within next 72 hours
 	var finalEvents []models.TimelineEvent
 
 	for _, ev := range unifiedEvents {
-		// Filter out ANY event without valid playable streams
-		if len(ev.Streams) == 0 {
-			continue
-		}
-
 		// Filter out placeholder or fake events
 		if IsPlaceholderEvent(ev.Title, ev.HomeTeam, ev.AwayTeam) {
 			continue
@@ -202,32 +197,24 @@ func FetchAllGlobalEvents(ctx context.Context) ([]models.TimelineEvent, error) {
 
 		// Determine if the event is currently live:
 		// 1) Dynamic streams are live only if explicitly marked live and within duration limit.
-		// 2) Fixed-time events are live only if now is between start time and realistic max end time.
-		//    If upstream feed explicitly marks match as not live (isLive == false) after normal start window, respect that it ended.
+		// 2) Fixed-time events are live while now is between start time and realistic max end time.
+		//    IsLive == false here only means status != "LIVE" (e.g. "PAUSED" during an innings break or
+		//    rain delay, or a feed that still says "UPCOMING"); finished statuses are already dropped by the parsers.
 		isLiveNow := false
 		if isDynamic {
 			isLiveNow = ev.IsLive != nil && *ev.IsLive && now <= maxEndTimeMs
 		} else {
-			if now >= ev.StartTimestampMs && now <= maxEndTimeMs {
-				if ev.IsLive != nil {
-					if *ev.IsLive {
-						isLiveNow = true
-					} else {
-						// Source explicitly says event is not live / ended
-						if now < ev.StartTimestampMs+15*60*1000 {
-							isLiveNow = true
-						} else {
-							isLiveNow = false
-						}
-					}
-				} else {
-					isLiveNow = true
-				}
-			}
+			isLiveNow = now >= ev.StartTimestampMs && now <= maxEndTimeMs
 		}
 
 		// Filter out events that are not upcoming and no longer live (stream or match finished)
 		if !isUpcoming && !isLiveNow {
+			continue
+		}
+
+		// Live events need a playable stream. Upcoming Cricket/Football matches are kept without one,
+		// since most feeds only publish stream links once the match goes live.
+		if len(ev.Streams) == 0 && (isLiveNow || !IsPrioritySport(ev.Category)) {
 			continue
 		}
 

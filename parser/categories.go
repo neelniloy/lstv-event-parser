@@ -336,13 +336,18 @@ func InferLeague(titleLower, catLower string) string {
 	return ""
 }
 
+// IsPrioritySport reports whether upcoming matches of this category are kept even before streams are published.
+func IsPrioritySport(category string) bool {
+	return strings.EqualFold(category, "cricket") || strings.EqualFold(category, "football")
+}
+
 func GetSportMaxDurationMs(category, title string) int64 {
 	catLower := strings.ToLower(category)
 	titleLower := strings.ToLower(title)
 
 	switch {
 	case catLower == "football":
-		return 2*60*60*1000 + 10*60*1000 // 2h 10m for Football (90m + 15m halftime + stoppage buffer)
+		return 2*60*60*1000 + 30*60*1000 // 2h 30m for Football (90m + halftime + stoppage + extra time buffer)
 
 	case catLower == "basketball":
 		return 2*60*60*1000 + 15*60*1000 // 2h 15m for Basketball (48m + timeouts/halftime buffer)
@@ -360,9 +365,9 @@ func GetSportMaxDurationMs(category, title string) int64 {
 			return 7 * 60 * 60 * 1000 // 7 hours for a Day's play in Test Cricket
 		}
 		if strings.Contains(titleLower, "odi") || strings.Contains(titleLower, "one day") {
-			return 8 * 60 * 60 * 1000 // 8 hours for ODI Cricket
+			return 8*60*60*1000 + 30*60*1000 // 8h 30m for ODI Cricket
 		}
-		return 3*60*60*1000 + 15*60*1000 // 3h 15m for T20 / T10 / The Hundred
+		return 3*60*60*1000 + 45*60*1000 // 3h 45m for T20 / T10 / The Hundred (rain delays, super overs)
 
 	case catLower == "motorsport":
 		return 2*60*60*1000 + 10*60*1000 // 2h 10m for Motorsport (F1 race limit is 2h)

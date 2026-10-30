@@ -218,7 +218,7 @@ func ParseTapmad(body []byte) []models.TimelineEvent {
 			})
 		}
 
-		if len(streams) == 0 || IsPlaceholderEvent(title, "", "") {
+		if IsPlaceholderEvent(title, "", "") {
 			continue
 		}
 
@@ -357,10 +357,6 @@ func ParseCrichd(body []byte, sourcePrefix string, crichdStreamMap map[string]mo
 					})
 				}
 			}
-		}
-
-		if len(streams) == 0 {
-			continue
 		}
 
 		genID := fmt.Sprintf("%s_%d_%d", strings.ToLower(sourcePrefix), HashString(title), startMs)
@@ -506,7 +502,7 @@ func ParseUnifiedMatchesJson(body []byte, sourcePrefix string) []models.Timeline
 			}
 		}
 
-		if len(streams) == 0 || IsPlaceholderEvent(title, obj.LocalteamName, obj.VisitorteamName) {
+		if IsPlaceholderEvent(title, obj.LocalteamName, obj.VisitorteamName) {
 			continue
 		}
 
@@ -678,7 +674,7 @@ func ParseSonyLiv(body []byte) []models.TimelineEvent {
 			genID = fmt.Sprintf("sony_%s_dynamic", matchID)
 		}
 
-		if len(streams) == 0 || IsPlaceholderEvent(title, raw.HomeTeam, raw.AwayTeam) {
+		if IsPlaceholderEvent(title, raw.HomeTeam, raw.AwayTeam) {
 			continue
 		}
 
@@ -811,7 +807,7 @@ func ParseWillow(body []byte) []models.TimelineEvent {
 			}
 		}
 
-		if len(streams) == 0 || IsPlaceholderEvent(title, "", "") {
+		if IsPlaceholderEvent(title, "", "") {
 			continue
 		}
 
@@ -985,10 +981,6 @@ func ParseSportsData(body []byte) []models.TimelineEvent {
 			}
 		}
 
-		if len(streams) == 0 {
-			continue
-		}
-
 		genID := fmt.Sprintf("sportsdata_%d_%d", HashString(title), startMs)
 		cat := obj.Category
 		if cat == "" {
@@ -1078,10 +1070,6 @@ func ParseFancode(body []byte) []models.TimelineEvent {
 				IsM3U:      false,
 				Headers:    GetStreamHeadersForURL(cleanURL, nil),
 			})
-		}
-
-		if len(streams) == 0 {
-			continue
 		}
 
 		genID := fmt.Sprintf("fancode_%s", obj.MatchID)
@@ -1177,10 +1165,6 @@ func ParseMonirulTapmad(body []byte) []models.TimelineEvent {
 			})
 		}
 
-		if len(streams) == 0 {
-			continue
-		}
-
 		entityIDStr := fmt.Sprintf("%v", obj.ContentEntityID)
 		genID := fmt.Sprintf("tapmad_%s", entityIDStr)
 		if entityIDStr == "" || entityIDStr == "<nil>" || entityIDStr == "0" {
@@ -1269,6 +1253,11 @@ func ParseMonirulSonyLiv(body []byte) []models.TimelineEvent {
 				}
 				break
 			}
+		}
+
+		// Titles like "4th T20I" say nothing without the series name
+		if homeTeam == "" && obj.EventName != "" && !strings.EqualFold(rawTitle, obj.EventName) {
+			title = fmt.Sprintf("%s - %s", UnescapeHTML(obj.EventName), title)
 		}
 
 		if IsPlaceholderEvent(title, homeTeam, awayTeam) {
